@@ -1,4 +1,4 @@
-# SkyScope — Exploration interactive du trafic aérien mondial
+# B2-Spirit — Exploration interactive du trafic aérien mondial
 
 **Projet IF36 — Université de Technologie de Troyes**
 
