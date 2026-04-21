@@ -64,6 +64,7 @@ ggplot(mean_hour, aes(x = heure, y = mean_flights)) +
 
 # pour les mois
 month_counts <- Q2 %>%
+  filter(!is.na(mois)) %>%   # retire les NA
   group_by(mois) %>%
   summarise(n = n(), .groups = "drop") %>%
   mutate(mois = factor(mois, levels = 1:12))
@@ -78,7 +79,7 @@ ggplot(month_counts, aes(x = mois, y = n)) +
   ) +
   theme_minimal(base_size = 12)
 
-
+month_counts
 
 
 # par semaine 
@@ -89,12 +90,14 @@ Q2 <- Q2 %>%
   )
 
 daily <- Q2 %>%
+  filter(!is.na(annee), !is.na(mois), !is.na(jour)) %>%
   mutate(
     date = make_date(annee, mois, jour),
     jour_semaine = wday(date, label = TRUE, week_start = 1)
   ) %>%
   group_by(date, jour_semaine) %>%
   summarise(n = n(), .groups = "drop")
+
 
 dow_mean <- daily %>%
   group_by(jour_semaine) %>%
