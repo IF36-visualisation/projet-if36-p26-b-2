@@ -1,0 +1,595 @@
+---
+title: "B2-Spirit — Exploration interactive du trafic aérien mondial"
+subtitle: "Projet IF36 — Université de Technologie de Troyes"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    highlight: tango
+    df_print: tibble
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.align = "center"
+)
+```
+
+# Introduction
+
+## Données
+
+Notre projet repose sur l'assemblage de plusieurs sources de données de référence dans le domaine de l'aviation ouverte, que nous croiserons pour construire une vision riche et multidimensionnelle du trafic aérien mondial.
+
+### Source principale : OpenSky Network — COVID-19 Flight Dataset
+
+Le cœur de notre analyse s'appuie sur le **OpenSky Network COVID-19 Flight Dataset**, publié sur [Zenodo](https://zenodo.org/records/7923702) sous licence CC-BY et documenté dans un article scientifique de référence ([Strohmeier et al., 2021](https://essd.copernicus.org/articles/13/357/2021/)). Ce dataset recense l'ensemble des vols captés par le réseau collaboratif OpenSky entre **janvier 2019 et décembre 2022**.
+
+Les données sont issues du protocole **ADS-B** (Automatic Dependent Surveillance–Broadcast) : les avions diffusent automatiquement leur position, vitesse et identification, captées par un réseau de plus de 5 500 récepteurs au sol déployés par des bénévoles et institutions à travers le monde. En période de pointe pré-pandémie, près de 100 000 vols étaient suivis par jour.
+
+**Format :** Fichiers CSV mensuels (un par mois, 48 fichiers au total).
+
+**Volume :** Plus de **41 millions de vols**, couvrant environ **160 000 aéronefs** et **13 900 aéroports** dans **127 pays**. Pour notre analyse, nous travaillons sur un échantillon aléatoire de 1 % des données de l'année 2019 (312 177 vols), une période non affectée par la pandémie de COVID-19 permettant d'observer le fonctionnement normal de l'aviation mondiale.
+
+**Variables du dataset principal (17 colonnes) :**
+
+| Variable | Type | Description |
+|---|---|---|
+| `callsign` | Catégorielle | Identifiant du vol sur les écrans ATC |
+| `number` | Catégorielle | Numéro commercial du vol |
+| `icao24` | Catégorielle | Identifiant unique du transpondeur |
+| `registration` | Catégorielle | Immatriculation de l'aéronef |
+| `typecode` | Catégorielle | Code OACI du modèle d'aéronef |
+| `origin` | Catégorielle | Code OACI de l'aéroport d'origine |
+| `destination` | Catégorielle | Code OACI de l'aéroport de destination |
+| `firstseen` / `lastseen` | Temporelle | Timestamps UTC des premier et dernier signaux |
+| `day` | Temporelle | Jour UTC du dernier signal |
+| `latitude_1` / `longitude_1` / `altitude_1` | Continue | Position de première détection |
+| `latitude_2` / `longitude_2` / `altitude_2` | Continue | Position de dernière détection |
+
+### Sources complémentaires
+
+- **OpenSky Aircraft Database** : métadonnées aéronefs (modèle, opérateur, propriétaire), jointure sur `icao24`.
+- **OurAirports** : ~78 000 aéroports avec coordonnées GPS, pays, type, jointure sur les codes OACI.
+- **OpenFlights** : ~6 200 compagnies aériennes, ~67 600 routes commerciales, 173 types d'appareils.
+
+## Plan d'analyse
+
+Nos questions s'articulent autour de quatre axes : les dynamiques temporelles (Q1–Q2), la géographie des flux (Q3–Q5), l'analyse de la flotte (Q6–Q7), et les stratégies des compagnies (Q8–Q9). Ce premier livrable présente les premières réponses à quatre de ces questions.
+
+```{r chargement-donnees}
+library(tidyverse)
+library(lubridate)
+
+flights <- read_csv("data/clean/clean_COVID_19_Flightfile.csv")
+```
+
+---
+
+# Axe 1 — Le pouls du ciel : dynamiques temporelles
+
+## Le trafic aérien a-t-il un rythme cardiaque ? *(Q2)*
+
+Nous cherchons ici à déterminer si le trafic aérien mondial suit des cycles réguliers comparables à un "rythme cardiaque", c'est-à-dire des variations prévisibles selon l'heure de la journée, le jour de la semaine ou encore le mois de l'année. Nous pouvons supposer que l'activité aérienne est plus intense à certaines heures de la journée, notamment le matin en Europe puis plus tard dans la journée en Amérique du Nord. Nous pouvons également imaginer que certains jours, comme le dimanche, sont plus calmes que les jours ouvrés.
+
+Pour répondre à cette question, nous avons construit trois visualisations : un graphique linéaire du nombre de vols par heure (UTC), un diagramme en barres du nombre de vols par jour de la semaine, et un diagramme en barres du nombre de vols par mois.
+
+Les données utilisées proviennent de notre dataset couvrant l'ensemble de l'année 2019. Cette période a été retenue car le trafic aérien n'était alors pratiquement pas affecté par la pandémie de COVID-19, ce qui permet d'observer un fonctionnement plus représentatif du rythme habituel de l'aviation mondiale.
+
+```{r q2-preparation}
+Q2 <- flights %>%
+  mutate(
+    firstseen = ymd_hms(firstseen, tz = "UTC"),
+    annee = year(firstseen),
+    mois = month(firstseen),
+    jour = day(firstseen),
+    heure = hour(firstseen)
+  )
+```
+
+### Variation du trafic aérien selon l'heure de la journée (UTC)
+
+Afin d'étudier l'existence d'un rythme journalier du trafic aérien mondial, nous avons calculé le nombre moyen de vols observés pour chaque heure de la journée (UTC), en moyennant les volumes sur l'ensemble des jours de l'année 2019.
+
+```{r q2-heure, fig.width=8, fig.height=5}
+hour_day <- Q2 %>%
+  group_by(jour, heure) %>%
+  summarise(n = n(), .groups = "drop")
+
+mean_hour <- hour_day %>%
+  group_by(heure) %>%
+  summarise(mean_flights = mean(n), .groups = "drop")
+
+ggplot(mean_hour, aes(x = heure, y = mean_flights)) +
+  geom_line(color = "#08519c", linewidth = 1) +
+  geom_point(color = "#08519c", size = 2) +
+  coord_cartesian(ylim = c(250, 600)) +
+  labs(
+    title = "Moyenne du trafic aérien par heure (UTC)",
+    subtitle = "Échantillon 1% — Année 2019",
+    x = "Heure (UTC)",
+    y = "Nombre moyen de vols"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+Le graphique montre une évolution cyclique très nette. Le volume de vols reste relativement élevé à 0h UTC (~412 vols), puis diminue pour atteindre un minimum entre 3h et 5h UTC (~305 vols), correspondant à la nuit en Europe et en Afrique. À partir de 6h UTC, le trafic reprend avec le début de journée en Europe occidentale. Le maximum est atteint à 15h UTC (~545 vols), période de chevauchement entre l'activité européenne et le début de journée en Amérique du Nord.
+
+### Variation du trafic aérien selon le jour de la semaine
+
+```{r q2-semaine, fig.width=8, fig.height=5}
+daily <- Q2 %>%
+  filter(!is.na(annee), !is.na(mois), !is.na(jour)) %>%
+  mutate(
+    date = make_date(annee, mois, jour),
+    jour_semaine = wday(date, label = TRUE, week_start = 1)
+  ) %>%
+  group_by(date, jour_semaine) %>%
+  summarise(n = n(), .groups = "drop")
+
+dow_mean <- daily %>%
+  group_by(jour_semaine) %>%
+  summarise(mean_flights = mean(n), .groups = "drop")
+
+ggplot(dow_mean, aes(x = jour_semaine, y = mean_flights)) +
+  geom_col(fill = "#4C78A8", width = 0.7) +
+  geom_text(aes(label = round(mean_flights, 0)),
+            vjust = -0.3, size = 3.5) +
+  coord_cartesian(ylim = c(600, 950)) +
+  labs(
+    title = "Trafic aérien moyen selon le jour de la semaine",
+    subtitle = "Nombre moyen de vols par jour — 2019",
+    x = NULL,
+    y = "Nombre moyen de vols"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    panel.grid.major.x = element_blank()
+  )
+```
+
+Les jours ouvrés présentent les niveaux les plus élevés, avec une progression du lundi (~840 vols) jusqu'au vendredi (~895 vols). Le samedi enregistre la baisse la plus marquée (~803 vols), confirmant le ralentissement des déplacements professionnels. Le dimanche remonte légèrement (~823 vols) mais reste inférieur aux jours de semaine.
+
+### Variation du trafic aérien selon le mois de l'année
+
+```{r q2-mois, fig.width=8, fig.height=5}
+month_counts <- Q2 %>%
+  filter(!is.na(mois)) %>%
+  group_by(mois) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  mutate(mois = factor(mois, levels = 1:12))
+
+ggplot(month_counts, aes(x = mois, y = n)) +
+  geom_col(fill = "#4C78A8") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "Nombre de vols par mois (2019)",
+    x = "Mois",
+    y = "Nombre de vols"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+Une forte saisonnalité apparaît : le trafic est faible en janvier-février (~21 000 vols), augmente progressivement et atteint un pic en juillet-août (~29 000 vols), correspondant à la haute saison touristique dans l'hémisphère nord. Décembre montre un léger rebond lié aux fêtes de fin d'année.
+
+### Conclusion Q2
+
+L'analyse confirme que le trafic aérien mondial possède bien un "rythme cardiaque". Des cycles nets apparaissent selon l'heure de la journée, le jour de la semaine et le mois de l'année, structurés par les fuseaux horaires, les rythmes économiques hebdomadaires et la saisonnalité touristique.
+
+---
+
+# Axe 2 — La géographie du ciel : cartographier les flux
+
+## Quels hubs structurent le réseau aérien mondial ? *(Q4)*
+
+Nous cherchons ici à identifier les aéroports qui jouent le rôle de hubs dans le réseau aérien mondial, c'est-à-dire les nœuds qui concentrent le plus de connexions et structurent les flux de passagers à travers le globe. Au-delà du simple classement par volume de vols, nous voulons comprendre la portée géographique de ces hubs : un aéroport peut être très actif tout en ne desservant que des destinations régionales, tandis qu'un autre peut avoir un rôle de pivot intercontinental malgré un volume de trafic moindre.
+
+Pour répondre à cette question, nous construisons trois visualisations : un bar chart des aéroports les plus connectés (nombre de destinations uniques), un nuage de points croisant volume de trafic et nombre de destinations, et un diagramme polaire de la répartition continentale des destinations depuis les grands hubs.
+
+Les données utilisées sont l'échantillon 2019 de notre dataset. Seuls les vols ayant à la fois une origine et une destination renseignées sont conservés (~70% du dataset), ce qui constitue une limite dont nous discuterons.
+
+```{r q4-preparation}
+# On ne garde que les vols avec origine ET destination renseignées
+flights_routes <- flights %>%
+  filter(
+    !is.na(origin), origin != "",
+    !is.na(destination), destination != ""
+  )
+
+cat("Vols avec origine et destination renseignées :",
+    nrow(flights_routes), "/", nrow(flights),
+    paste0("(", round(nrow(flights_routes)/nrow(flights)*100, 1), "%)"))
+```
+
+### Top 20 des aéroports les plus connectés
+
+Pour mesurer la centralité d'un aéroport dans le réseau, nous comptons le nombre de destinations uniques desservies depuis chaque aéroport d'origine. Ce "degré sortant" dans le graphe du réseau aérien est un indicateur plus riche que le simple volume de vols, car il reflète la diversité des connexions offertes.
+
+```{r q4-top20-connexions, fig.width=9, fig.height=7}
+hub_connectivity <- flights_routes %>%
+  group_by(origin) %>%
+  summarise(
+    n_destinations = n_distinct(destination),
+    n_flights = n(),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(n_destinations))
+
+top20_hubs <- hub_connectivity %>%
+  slice_head(n = 20) %>%
+  mutate(origin = fct_reorder(origin, n_destinations))
+
+ggplot(top20_hubs, aes(x = origin, y = n_destinations, fill = n_flights)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_gradient(
+    low = "#9ecae1", high = "#08306b",
+    labels = scales::comma,
+    name = "Nb de vols"
+  ) +
+  labs(
+    title = "Top 20 des aéroports les plus connectés (2019)",
+    subtitle = "Nombre de destinations uniques desservies — Échantillon 1%",
+    x = "Aéroport (code OACI)",
+    y = "Nombre de destinations uniques",
+    caption = "Source : OpenSky Network COVID-19 Flight Dataset"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    panel.grid.major.y = element_blank()
+  )
+```
+
+Le classement fait apparaître les grands hubs attendus. On retrouve les aéroports majeurs américains (KATL — Atlanta, KDFW — Dallas, KORD — Chicago, KJFK — New York JFK, KLAX — Los Angeles), les hubs européens (LFPG — Paris-CDG, EGLL — Londres Heathrow, EDDF — Francfort, EHAM — Amsterdam), ainsi que les hubs du Moyen-Orient et d'Asie. Le nombre de destinations uniques varie considérablement : les aéroports les plus connectés dépassent les 150 destinations, là où un aéroport régional important n'en dessert que quelques dizaines.
+
+Il est important de noter que ce classement est influencé par le biais de couverture du réseau OpenSky, dont les capteurs ADS-B sont plus denses en Europe et en Amérique du Nord. Les hubs asiatiques ou africains peuvent être sous-représentés.
+
+### Relation entre volume de trafic et connectivité
+
+Le volume de trafic (nombre de vols) et la connectivité (nombre de destinations) ne mesurent pas la même chose. Un aéroport peut avoir beaucoup de vols concentrés sur quelques routes très fréquentées, ou au contraire desservir de nombreuses destinations avec des fréquences faibles. Le croisement de ces deux indicateurs permet de distinguer les "vrais hubs" (fort volume ET forte connectivité) des "corridors" (fort volume mais peu de destinations).
+
+```{r q4-scatter, fig.width=9, fig.height=7}
+# On sélectionne les aéroports avec au moins 100 vols pour lisibilité
+hub_scatter <- hub_connectivity %>%
+  filter(n_flights >= 100)
+
+# Top 10 à labelliser
+top10_labels <- hub_connectivity %>% slice_head(n = 10)
+
+ggplot(hub_scatter, aes(x = n_flights, y = n_destinations)) +
+  geom_point(alpha = 0.4, color = "#4C78A8", size = 2) +
+  geom_point(
+    data = top10_labels,
+    aes(x = n_flights, y = n_destinations),
+    color = "#d62728", size = 3
+  ) +
+  ggrepel::geom_text_repel(
+    data = top10_labels,
+    aes(x = n_flights, y = n_destinations, label = origin),
+    size = 3.5, color = "#d62728",
+    max.overlaps = 20, seed = 42
+  ) +
+  scale_x_continuous(labels = scales::comma) +
+  labs(
+    title = "Volume de trafic vs. connectivité des aéroports (2019)",
+    subtitle = "Chaque point = 1 aéroport (min. 100 vols) — Top 10 en rouge",
+    x = "Nombre de vols (départs)",
+    y = "Nombre de destinations uniques",
+    caption = "Source : OpenSky Network COVID-19 Flight Dataset"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+Le nuage de points révèle une corrélation positive attendue entre volume et connectivité : les aéroports qui traitent plus de vols tendent aussi à desservir plus de destinations. Cependant, la relation n'est pas parfaitement linéaire. Certains aéroports se démarquent par une connectivité élevée relativement à leur volume de trafic — ce sont des hubs au sens fort du terme, qui jouent un rôle de redistribution des flux. À l'inverse, d'autres aéroports affichent un volume élevé mais une connectivité modérée, ce qui indique un trafic concentré sur quelques routes à haute fréquence (typique des marchés domestiques américains).
+
+### Profil géographique des grands hubs : vers où connectent-ils ?
+
+Pour aller au-delà du simple comptage, nous analysons la répartition géographique des destinations depuis les plus grands hubs. Cela permet de comprendre le rôle de chaque hub dans l'architecture du réseau : pivot intercontinental, hub régional, ou porte d'entrée d'un continent.
+
+Pour cela, nous utilisons le préfixe du code OACI de la destination pour identifier la région géographique : les codes commençant par K correspondent à l'Amérique du Nord (USA), E à l'Europe du Nord, L à l'Europe du Sud et Méditerranée, etc.
+
+```{r q4-profil-geo, fig.width=10, fig.height=8}
+# Mapping des préfixes OACI vers les régions
+get_region <- function(code) {
+  prefix <- str_sub(code, 1, 1)
+  case_when(
+    prefix == "K" ~ "Amérique du Nord (US)",
+    prefix == "C" ~ "Canada",
+    prefix %in% c("E") ~ "Europe du Nord",
+    prefix %in% c("L") ~ "Europe du Sud / Méditerranée",
+    prefix %in% c("O") ~ "Moyen-Orient / Asie centrale",
+    prefix %in% c("V", "W", "Z", "R") ~ "Asie / Pacifique",
+    prefix %in% c("S", "M", "T") ~ "Amérique latine / Caraïbes",
+    prefix %in% c("D", "F", "G", "H") ~ "Afrique",
+    prefix %in% c("U") ~ "Russie / CEI",
+    prefix %in% c("B") ~ "Chine / Taiwan / Islande",
+    prefix %in% c("Y") ~ "Australie",
+    prefix %in% c("A", "N", "P") ~ "Pacifique / Arctique",
+    TRUE ~ "Autre"
+  )
+}
+
+# Sélection des 6 hubs les plus connectés
+top6_hubs <- hub_connectivity %>%
+  slice_head(n = 6) %>%
+  pull(origin)
+
+hub_destinations <- flights_routes %>%
+  filter(origin %in% top6_hubs) %>%
+  mutate(region_dest = get_region(destination)) %>%
+  count(origin, region_dest) %>%
+  group_by(origin) %>%
+  mutate(pct = n / sum(n) * 100) %>%
+  ungroup()
+
+ggplot(hub_destinations, aes(x = region_dest, y = pct, fill = region_dest)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ origin, ncol = 3) +
+  coord_flip() +
+  scale_fill_brewer(palette = "Set3") +
+  labs(
+    title = "Profil géographique des destinations depuis les 6 principaux hubs",
+    subtitle = "Répartition (%) des vols par région de destination — 2019",
+    x = NULL,
+    y = "Part des vols (%)",
+    caption = "Source : OpenSky Network — Régions estimées par préfixe OACI"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 12),
+    axis.text.y = element_text(size = 8)
+  )
+```
+
+Ce graphique en facettes révèle des profils très différents selon les hubs. Les aéroports américains (KATL, KORD, KDFW) présentent un profil fortement domestique : la grande majorité de leurs destinations sont d'autres aéroports américains (préfixe K), ce qui reflète la taille et la structure du marché intérieur américain. En comparaison, les hubs européens comme Paris-CDG (LFPG) ou Francfort (EDDF) affichent une répartition beaucoup plus diversifiée, avec des parts significatives vers l'Europe du Nord, l'Europe du Sud, l'Afrique, le Moyen-Orient et l'Amérique du Nord — ce qui confirme leur rôle de pivots intercontinentaux.
+
+Cette analyse montre que le concept de "hub" recouvre des réalités très différentes : un hub domestique comme Atlanta (premier aéroport mondial en volume) fonctionne comme un redistributeur de flux intérieurs, tandis qu'un hub comme Paris-CDG ou Francfort sert de passerelle entre continents.
+
+### Limites et discussion
+
+Plusieurs limites doivent être soulignées. Le taux de complétion des champs `origin` et `destination` est de ~70%, ce qui signifie que 30% des vols sont exclus de cette analyse. Ce filtrage peut introduire un biais si les vols sans destination renseignée ne sont pas uniformément répartis entre les aéroports. Par ailleurs, l'identification des régions par le premier caractère du code OACI est une heuristique simplifiée — le préfixe "B" regroupe par exemple l'Islande et la Chine, et certaines attributions sont approximatives. Enfin, le biais de couverture du réseau OpenSky (capteurs plus denses en Europe et Amérique du Nord) implique que les hubs africains ou d'Asie du Sud-Est sont probablement sous-représentés dans nos résultats.
+
+Malgré ces limites, l'analyse met en évidence des structures réelles du réseau aérien mondial, cohérentes avec les connaissances existantes sur la hiérarchie des aéroports internationaux.
+
+---
+
+# Axe 3 — Les machines : analyse de la flotte mondiale
+
+## Quels avions dominent le ciel ? *(Q6)*
+
+Nous cherchons ici à identifier les types d'aéronefs les plus utilisés dans le trafic aérien mondial en 2019, et à comprendre comment la flotte se répartit entre les différents constructeurs. On peut supposer que quelques modèles très répandus, comme l'Airbus A320 ou le Boeing 737, concentrent une grande partie du trafic mondial, tandis que d'autres types d'appareils occupent des niches plus spécialisées.
+
+Pour répondre à cette question, nous avons construit trois visualisations : un diagramme en barres des 15 types d'aéronefs les plus fréquents, un diagramme en barres de la répartition par famille de constructeur, et un graphique linéaire de l'évolution mensuelle par famille.
+
+Il est important de noter que 24,6% des vols ne disposent pas de typecode renseigné. Ces observations ont été retirées de l'analyse. Les résultats reflètent donc uniquement les vols pour lesquels le type d'aéronef est connu.
+
+```{r q6-nettoyage}
+flights_clean <- flights %>%
+  filter(!is.na(typecode), typecode != "NA", typecode != "")
+```
+
+### Top 15 des types d'aéronefs les plus fréquents
+
+```{r q6-top15, fig.width=8, fig.height=6}
+top15 <- flights_clean %>%
+  count(typecode, sort = TRUE) %>%
+  slice_head(n = 15) %>%
+  mutate(typecode = fct_reorder(typecode, n))
+
+ggplot(top15, aes(x = typecode, y = n, fill = n)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  scale_fill_gradient(low = "#9ecae1", high = "#08519c") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "Top 15 des types d'aéronefs les plus fréquents (2019)",
+    subtitle = "Basé sur 1% du dataset OpenSky — 312 177 vols",
+    x = "Type d'aéronef (code OACI)",
+    y = "Nombre de vols",
+    caption = "Source : OpenSky Network COVID-19 Flight Dataset"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    panel.grid.major.y = element_blank()
+  )
+```
+
+Le Boeing 737-800 (B738) arrive en tête avec environ 43 000 vols, suivi de près par l'Airbus A320 avec environ 38 500 vols. Ces deux modèles reflètent leur popularité pour les vols court et moyen-courriers. Les modèles A321 et A319 de la famille A320 d'Airbus confirment la domination de cette gamme. Plus loin dans le classement, on trouve des appareils régionaux (Embraer E75L, Bombardier CRJ9) et le Boeing 777 (B77W) pour le long-courrier.
+
+### Répartition par famille de constructeur
+
+```{r q6-familles, fig.width=8, fig.height=5}
+flights_famille <- flights_clean %>%
+  mutate(famille = case_when(
+    str_starts(typecode, "A3") | str_starts(typecode, "A2") |
+      str_starts(typecode, "A1") ~ "Airbus",
+    str_starts(typecode, "B7") ~ "Boeing",
+    str_starts(typecode, "E") ~ "Embraer",
+    str_starts(typecode, "CRJ") ~ "Bombardier CRJ",
+    str_starts(typecode, "AT") ~ "ATR",
+    str_starts(typecode, "DH") ~ "De Havilland",
+    TRUE ~ "Autres"
+  ))
+
+famille_count <- flights_famille %>%
+  count(famille, sort = TRUE) %>%
+  mutate(
+    pct = n / sum(n) * 100,
+    famille = fct_reorder(famille, n)
+  )
+
+ggplot(famille_count, aes(x = famille, y = n, fill = famille)) +
+  geom_col(show.legend = FALSE) +
+  geom_text(aes(label = paste0(round(pct, 1), "%")), hjust = -0.1, size = 4) +
+  coord_flip() +
+  scale_y_continuous(
+    labels = scales::comma,
+    expand = expansion(mult = c(0, 0.15))
+  ) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Répartition des vols par famille de constructeur (2019)",
+    subtitle = "Airbus et Boeing dominent largement le marché",
+    x = "Famille d'aéronef",
+    y = "Nombre de vols",
+    caption = "Source : OpenSky Network COVID-19 Flight Dataset"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    panel.grid.major.y = element_blank()
+  )
+```
+
+Boeing représente 35,3% des vols et Airbus 34,7%, soit ensemble près de 70% du trafic total. Les constructeurs régionaux Embraer (8,1%) et Bombardier CRJ (4,9%) se spécialisent sur les vols régionaux, tandis qu'ATR (1,5%) et De Havilland (1,5%) couvrent les liaisons locales.
+
+### Évolution mensuelle par famille d'aéronef
+
+```{r q6-mensuel, fig.width=9, fig.height=5}
+flights_mensuel <- flights_famille %>%
+  mutate(mois = month(as.Date(day), label = TRUE, abbr = TRUE)) %>%
+  filter(famille %in% c("Airbus", "Boeing", "Embraer",
+                         "Bombardier CRJ", "ATR")) %>%
+  count(mois, famille)
+
+ggplot(flights_mensuel, aes(x = mois, y = n,
+                             color = famille, group = famille)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2.5) +
+  scale_color_brewer(palette = "Set1") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "Évolution mensuelle des vols par famille d'aéronef (2019)",
+    subtitle = "Saisonnalité estivale visible pour toutes les familles",
+    x = "Mois",
+    y = "Nombre de vols",
+    color = "Constructeur",
+    caption = "Source : OpenSky Network COVID-19 Flight Dataset"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+```
+
+Boeing et Airbus suivent des courbes très similaires tout au long de l'année, avec un creux en février et un pic estival en juillet-août. La flotte aérienne mondiale en 2019 est dominée par ce duopole qui se partage près de 70% du trafic.
+
+---
+
+# Axe 4 — Les compagnies : stratégies et résilience
+
+## Quelles compagnies ont le mieux résisté ? *(Q8)*
+
+Nous cherchons ici à déterminer si toutes les compagnies aériennes ont subi la crise COVID-19 de la même façon, et si le modèle économique — low-cost, réseau ou cargo — a influencé leur trajectoire. Les compagnies sont identifiées via les **3 premiers caractères du callsign**, qui correspondent au code OACI de la compagnie opératrice.
+
+```{r q8-chargement}
+library(ggbump)
+
+airlines_clean <- tribble(
+  ~icao, ~name,
+  "SWA", "Southwest Airlines",
+  "RYR", "Ryanair",
+  "EZY", "easyJet",
+  "WZZ", "Wizz Air",
+  "VLG", "Vueling",
+  "DAL", "Delta Air Lines",
+  "AAL", "American Airlines",
+  "UAL", "United Airlines",
+  "DLH", "Lufthansa",
+  "AFR", "Air France",
+  "BAW", "British Airways",
+  "THY", "Turkish Airlines",
+  "FDX", "FedEx",
+  "UPS", "UPS Airlines"
+)
+
+flights_q8 <- flights %>%
+  mutate(icao = str_to_upper(str_trim(substr(callsign, 1, 3)))) %>%
+  inner_join(airlines_clean, by = "icao") %>%
+  mutate(date = as.Date(day),
+         month = floor_date(date, "month"))
+
+monthly_airline <- flights_q8 %>%
+  filter(!is.na(name)) %>%
+  group_by(month, name) %>%
+  summarise(n_flights = n(), .groups = "drop")
+
+top_airlines <- monthly_airline %>%
+  group_by(name) %>%
+  summarise(total = sum(n_flights)) %>%
+  slice_max(total, n = 10) %>%
+  pull(name)
+
+monthly_airline <- monthly_airline %>%
+  filter(name %in% top_airlines)
+```
+
+### Classement mensuel des compagnies aériennes (bump chart)
+
+```{r q8-bump, fig.width=10, fig.height=6}
+bump_data <- monthly_airline %>%
+  group_by(month) %>%
+  mutate(rank = rank(-n_flights)) %>%
+  ungroup()
+
+ggplot(bump_data, aes(x = month, y = rank, color = name)) +
+  geom_bump(linewidth = 1.2) +
+  geom_point(size = 2) +
+  scale_y_reverse() +
+  labs(
+    title = "Évolution du classement des compagnies aériennes (2019)",
+    x = "Temps",
+    y = "Classement",
+    color = "Compagnie"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+Southwest Airlines occupe la première place chaque mois grâce à son modèle point-à-point à haute fréquence sur le marché intérieur américain. Delta et American se disputent les places suivantes, avec Delta qui prend l'avantage en été. Ryanair, première compagnie européenne du classement, maintient une position stable autour de la 4e place.
+
+### Comparaison ciblée : Low-cost, Majors et Cargo
+
+```{r q8-comparaison, fig.width=9, fig.height=5}
+selected_airlines <- c("Ryanair", "easyJet", "Air France",
+                        "Lufthansa", "FedEx", "UPS Airlines")
+
+comparison_data <- monthly_airline %>%
+  filter(name %in% selected_airlines)
+
+ggplot(comparison_data, aes(x = month, y = n_flights, color = name)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  scale_color_brewer(palette = "Set1") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "Comparaison des stratégies : Low-cost vs Majors vs Cargo",
+    subtitle = "Évolution mensuelle du volume de vols — 2019",
+    x = "Temps",
+    y = "Nombre de vols",
+    color = "Compagnie"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+```
+
+Trois profils de saisonnalité bien distincts émergent. Les compagnies **low-cost** (Ryanair, easyJet) affichent la saisonnalité la plus prononcée : leur volume double presque entre janvier et août, reflétant leur dépendance aux flux touristiques estivaux. Les **majors européennes** (Air France, Lufthansa) suivent une courbe plus modérée et lissée. Le **cargo** (FedEx, UPS Airlines) présente un profil radicalement différent : volumes stables de janvier à novembre, puis progression nette en décembre avec le pic du commerce en ligne.
+
+### Conclusion Q8
+
+L'analyse de l'année 2019 met en évidence trois modèles économiques aux comportements très distincts. Les compagnies low-cost, plus saisonnières et agiles, sont structurellement mieux armées pour rebondir après un choc. Les majors de réseau, plus stables mais moins flexibles, sont plus exposées à l'effondrement du trafic affaires. Le cargo, avec sa saisonnalité hivernale et son indépendance vis-à-vis des passagers, s'est révélé le segment le plus résilient de la crise sanitaire.
