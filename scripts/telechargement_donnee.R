@@ -97,10 +97,14 @@ flights <- bind_rows(
   f2021,
   f2022
 )
+# le fichier fait 1 million de ligne c'est trop donc je le reduit par 2 
+
+flights_reduit <- flights %>%
+  slice_sample(prop = 0.3)
 
 write_csv(
-  flights,
+  flights_reduit,
   "data/clean/clean_COVID_19_Flightfile_entier.csv"
 )
 
-dim(flights)
+dim(flights_reduit)
