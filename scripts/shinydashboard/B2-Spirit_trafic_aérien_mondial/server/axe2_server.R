@@ -1,6 +1,7 @@
 library(shiny)
 library(tidyverse)
 library(maps)
+library(geosphere)
 library(viridis)
 
 
@@ -110,6 +111,12 @@ axe2_server <- function(input, output, session) {
   
   # =================================================
   # 3. MAP
+  # =================================================
+  
+  world <- map_data("world")
+  
+  # =================================================
+  # 4. graphe
   # =================================================
   
   output$Axe2Q3Map <- renderPlot({
