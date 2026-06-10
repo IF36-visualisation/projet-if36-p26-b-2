@@ -4,10 +4,12 @@ library(plotly)
 
 options(shiny.autoreload = TRUE)
 
-# ===================================================== 
-# Working directory 
-# ===================================================== 
-setwd( "C:/Users/elodie/OneDrive/Bureau/sn2/IF36/projet_if36_2/projet-if36-p26-b-2/scripts/shinydashboard/B2-Spirit_trafic_aérien_mondial" )
+# =====================================================
+# Working directory
+# =====================================================
+# Pas de setwd : runApp() place déjà le working directory dans le
+# dossier de l'application, le chemin en dur ne marchait que sur un
+# seul poste.
 
 # =====================================================
 # Chargement des pages UI
