@@ -5,7 +5,7 @@ library(maps)
 library(viridis)
 
 # =====================================================
-# AXE 4 SERVER — Q9 : le réseau des compagnies
+# AXE 4 SERVER — Q8 - 9
 # =====================================================
 
 # Dictionnaire code OACI -> compagnie (le même que pour la Q8)
@@ -27,7 +27,209 @@ q9_airlines <- tribble(
   "UPS", "UPS Airlines",       "Cargo"
 )
 
+# =================================================
+# Q8 — Données préparées au chargement du module
+# =================================================
+
+flights_all_q8 <- bind_rows(
+  read_csv("../../../data/clean/clean_COVID_19_Flightfile_2019.csv", show_col_types = FALSE) %>% mutate(annee = 2019L),
+  read_csv("../../../data/clean/clean_COVID_19_Flightfile_2020.csv", show_col_types = FALSE) %>% mutate(annee = 2020L),
+  read_csv("../../../data/clean/clean_COVID_19_Flightfile_2021.csv", show_col_types = FALSE) %>% mutate(annee = 2021L),
+  read_csv("../../../data/clean/clean_COVID_19_Flightfile_2022.csv", show_col_types = FALSE) %>% mutate(annee = 2022L)
+)
+
+flights_q8 <- flights_all_q8 %>%
+  mutate(icao = str_to_upper(str_trim(substr(callsign, 1, 3)))) %>%
+  inner_join(q9_airlines, by = "icao") %>%
+  mutate(mois = month(firstseen)) %>%
+  group_by(annee, mois, name, modele) %>%
+  summarise(n = n(), .groups = "drop")
+
+base_jan2019_q8 <- flights_q8 %>%
+  filter(annee == 2019, mois == 1) %>%
+  select(name, base = n)
+
+flights_normalized_q8 <- flights_q8 %>%
+  left_join(base_jan2019_q8, by = "name") %>%
+  filter(!is.na(base), base > 0) %>%
+  mutate(
+    index     = (n / base) * 100,
+    date      = make_date(annee, mois, 1),
+    annee_chr = as.character(annee)
+  )
+
+# =================================================
+
 axe4_server <- function(input, output, session) {
+
+  # =================================================
+  # Q8-1 — Line chart normalisé
+  # =================================================
+
+  output$q8_line_chart <- renderPlotly({
+
+    req(input$q8_years)
+
+    data_plot <- flights_normalized_q8 %>%
+      filter(annee_chr %in% input$q8_years)
+
+    p <- ggplot(
+      data_plot,
+      aes(
+        x     = date,
+        y     = index,
+        color = name,
+        group = name,
+        text  = paste0(
+          name, " (", modele, ")",
+          "<br>Date : ", format(date, "%b %Y"),
+          "<br>Indice : ", round(index, 1)
+        )
+      )
+    ) +
+
+      geom_line(linewidth = 0.9) +
+
+      geom_hline(
+        yintercept = 100,
+        linetype   = "dashed",
+        color      = "gray50"
+      ) +
+
+      scale_x_date(
+        date_labels = "%b %Y",
+        date_breaks = "3 months"
+      ) +
+
+      scale_color_brewer(palette = "Paired") +
+
+      labs(
+        title = "Évolution du trafic par compagnie (base 100 = jan. 2019)",
+        x     = NULL,
+        y     = "Indice (base 100)",
+        color = "Compagnie"
+      ) +
+
+      theme_minimal(base_size = 12) +
+
+      theme(
+        plot.title  = element_text(face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1)
+      )
+
+    ggplotly(p, tooltip = "text")
+  })
+
+  # =================================================
+  # Q8-2 — Bar chart % chute
+  # =================================================
+
+  output$q8_bar_chute <- renderPlotly({
+
+    moy_2019 <- flights_q8 %>%
+      filter(annee == 2019) %>%
+      group_by(name, modele) %>%
+      summarise(moy_2019 = mean(n), .groups = "drop")
+
+    avril_2020 <- flights_q8 %>%
+      filter(annee == 2020, mois == 4) %>%
+      select(name, n_avril2020 = n)
+
+    chute <- moy_2019 %>%
+      left_join(avril_2020, by = "name") %>%
+      filter(!is.na(n_avril2020)) %>%
+      mutate(
+        pct_chute = ((n_avril2020 - moy_2019) / moy_2019) * 100,
+        name      = reorder(name, pct_chute)
+      )
+
+    p <- ggplot(
+      chute,
+      aes(
+        x    = name,
+        y    = pct_chute,
+        fill = modele,
+        text = paste0(name, " (", modele, ") : ", round(pct_chute, 1), "%")
+      )
+    ) +
+
+      geom_col(width = 0.7) +
+
+      coord_flip() +
+
+      scale_fill_manual(values = c(
+        "Low-cost"     = "#fdae61",
+        "Major réseau" = "#4C78A8",
+        "Cargo"        = "#5e4fa2"
+      )) +
+
+      labs(
+        title = "Chute du trafic par compagnie : moyenne 2019 → avril 2020",
+        x     = NULL,
+        y     = "Variation (%)",
+        fill  = "Modèle économique"
+      ) +
+
+      theme_minimal(base_size = 12) +
+
+      theme(
+        plot.title = element_text(face = "bold")
+      )
+
+    ggplotly(p, tooltip = "text")
+  })
+
+  # =================================================
+  # Q8-3 — Bar chart récupération fin 2021
+  # =================================================
+
+  output$q8_bar_reprise <- renderPlotly({
+
+    reprise <- flights_normalized_q8 %>%
+      filter(annee == 2021, mois == 12) %>%
+      mutate(name = reorder(name, index))
+
+    p <- ggplot(
+      reprise,
+      aes(
+        x    = name,
+        y    = index,
+        fill = modele,
+        text = paste0(name, " (", modele, ") : ", round(index, 1))
+      )
+    ) +
+
+      geom_col(width = 0.7) +
+
+      geom_hline(
+        yintercept = 100,
+        linetype   = "dashed",
+        color      = "gray40"
+      ) +
+
+      coord_flip() +
+
+      scale_fill_manual(values = c(
+        "Low-cost"     = "#fdae61",
+        "Major réseau" = "#4C78A8",
+        "Cargo"        = "#5e4fa2"
+      )) +
+
+      labs(
+        title = "Niveau de récupération en décembre 2021 (base 100 = jan. 2019)",
+        x     = NULL,
+        y     = "Indice (base 100)",
+        fill  = "Modèle économique"
+      ) +
+
+      theme_minimal(base_size = 12) +
+
+      theme(
+        plot.title = element_text(face = "bold")
+      )
+
+    ggplotly(p, tooltip = "text")
+  })
 
   # =================================================
   # 1. CHARGEMENT DES DONNÉES

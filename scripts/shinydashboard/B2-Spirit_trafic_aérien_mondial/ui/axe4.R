@@ -18,6 +18,248 @@ axe4_ui <- tabItem(
 
   tabName = "Axe4",
 
+  # =================================================
+  # Q8
+  # =================================================
+
+  fluidRow(
+
+    # -----------------------------------------------
+    # INTRODUCTION
+    # -----------------------------------------------
+
+    box(
+      title = "Axe 4 — Les compagnies : stratégies et résilience",
+      width = 12,
+      status = "primary",
+      solidHeader = TRUE,
+
+      h2("Q8 — Quelles compagnies ont le mieux résisté à la crise COVID ?"),
+
+      p("
+        Dans cette partie, nous comparons les trajectoires des principales
+        compagnies aériennes mondiales durant la crise COVID.
+        En identifiant les compagnies via les trois premiers caractères
+        du callsign (code OACI de l'opérateur), nous analysons leur
+        profil de chute et de reprise entre 2019 et 2022.
+      "),
+
+      p("
+        Nous cherchons à déterminer si le modèle économique — cargo,
+        low-cost ou major — a joué un rôle dans la résistance et la
+        vitesse de reprise de chaque compagnie.
+      ")
+    ),
+
+    # -----------------------------------------------
+    # HYPOTHÈSE 1 + GRAPHIQUE 1 — Line chart normalisé
+    # -----------------------------------------------
+
+    box(
+      title = "Hypothèse avant analyse",
+      width = 12,
+      status = "warning",
+      solidHeader = TRUE,
+
+      h4("Hypothèse 1 — Le cargo a mieux résisté à la crise"),
+      p("
+        FedEx et UPS transportant des marchandises et non des passagers,
+        ils n'ont pas été soumis aux mêmes restrictions de déplacement.
+        Nous supposons que leur trafic a peu chuté en 2020 comparé
+        aux compagnies passagers.
+      ")
+    ),
+
+    box(
+      title = "Évolution du trafic par compagnie (base 100 = janvier 2019)",
+      width = 12,
+      status = "info",
+      solidHeader = TRUE,
+
+      fluidRow(
+        column(
+          width = 12,
+          checkboxGroupInput(
+            inputId = "q8_years",
+            label = "Années à afficher :",
+            choices = c("2019", "2020", "2021", "2022"),
+            selected = c("2019", "2020", "2021", "2022"),
+            inline = TRUE
+          )
+        )
+      ),
+
+      plotlyOutput("q8_line_chart", height = "500px")
+    ),
+
+    box(
+      title = "Analyse des résultats — Graphique 1",
+      width = 12,
+      status = "success",
+      solidHeader = TRUE,
+
+      h4("Hypothèse 1: Le cargo a mieux résisté à la crise — Validée"),
+      p("
+        Les courbes de FedEx et UPS Airlines restent proches de l'indice 100
+        tout au long de la période, contrairement aux compagnies passagers
+        qui s'effondrent en avril 2020. Le cargo n'a clairement pas subi
+        la même crise.
+      "),
+
+      p("
+        La chute d'avril 2020 est visible pour toutes les compagnies passagers,
+        mais l'amplitude varie sensiblement. Le graphique 2 permettra de
+        quantifier ces différences.
+      ")
+    ),
+
+    # -----------------------------------------------
+    # HYPOTHÈSE 2 + GRAPHIQUE 2 — Bar chart % chute
+    # -----------------------------------------------
+
+    box(
+      title = "Hypothèse avant analyse",
+      width = 12,
+      status = "warning",
+      solidHeader = TRUE,
+
+      h4("Hypothèse 2 — Toutes les compagnies passagers ont chuté de façon similaire en avril 2020"),
+      p("
+        Quelle que soit leur stratégie, les confinements généralisés
+        ont cloué tous les avions passagers au sol de la même façon
+        au pic de la crise, entraînant des chutes comparables.
+      ")
+    ),
+
+    # -----------------------------------------------
+    # GRAPHIQUE 2 — Bar chart % chute
+    # -----------------------------------------------
+
+    box(
+      title = "Chute du trafic au pic de crise (moyenne 2019 → avril 2020)",
+      width = 12,
+      status = "info",
+      solidHeader = TRUE,
+
+      plotlyOutput("q8_bar_chute", height = "450px")
+    ),
+
+    box(
+      title = "Analyse des résultats — Graphique 2",
+      width = 12,
+      status = "success",
+      solidHeader = TRUE,
+
+      h4("Hypothèse 2: Toutes les compagnies passagers ont chuté de façon similaire — Invalidée"),
+      p("
+        L'amplitude de la chute varie fortement selon les compagnies,
+        de -50% pour Southwest Airlines à -95% pour easyJet.
+        Les confinements n'ont pas eu le même effet sur toutes les
+        compagnies passagers : la géographie des routes, la dépendance
+        au trafic international et la structure des coûts ont joué
+        un rôle différenciant.
+      "),
+      p("
+        FedEx et UPS confirment par contraste la résistance du cargo,
+        avec des chutes inférieures à 10% là où les passagers perdent
+        entre 50% et 95% de leur trafic.
+      ")
+    ),
+
+    # -----------------------------------------------
+    # HYPOTHÈSE 3 + GRAPHIQUE 3 — Bar chart reprise
+    # -----------------------------------------------
+
+    box(
+      title = "Hypothèse avant analyse",
+      width = 12,
+      status = "warning",
+      solidHeader = TRUE,
+
+      h4("Hypothèse 3 — Les low-cost ont rebondi plus vite que les majors"),
+      p("
+        Grâce à leur modèle économique flexible et leurs coûts réduits,
+        Ryanair et easyJet devraient retrouver leur niveau de 2019
+        plus rapidement qu'Air France ou Lufthansa.
+      ")
+    ),
+
+    # -----------------------------------------------
+    # GRAPHIQUE 3 — Bar chart récupération fin 2021
+    # -----------------------------------------------
+
+    box(
+      title = "Niveau de récupération par compagnie (indice fin 2021 vs 2019)",
+      width = 12,
+      status = "info",
+      solidHeader = TRUE,
+
+      plotlyOutput("q8_bar_reprise", height = "450px")
+    ),
+
+    box(
+      title = "Analyse des résultats — Graphique 3",
+      width = 12,
+      status = "success",
+      solidHeader = TRUE,
+
+      h4("Hypothèse 3: Les low-cost ont rebondi plus vite que les majors — Invalidée"),
+      p("
+        Les résultats sont très hétérogènes et contredisent l'hypothèse.
+        Certes Southwest Airlines (~135) et Ryanair (~110) ont bien récupéré,
+        mais easyJet (~48) et Vueling (~75) se trouvent parmi les compagnies
+        les moins redressées, en dessous de British Airways et Lufthansa.
+      "),
+      p("
+        À l'inverse, plusieurs majors comme Delta Air Lines (~130) et
+        American Airlines (~108) ont récupéré aussi bien ou mieux que
+        la plupart des low-cost. Le modèle économique seul ne suffit
+        donc pas à expliquer la vitesse de reprise.
+      "),
+      p("
+        UPS Airlines (~165) confirme à nouveau la résilience exceptionnelle
+        du cargo, dont le trafic dépasse largement son niveau pré-COVID
+        grâce à l'explosion du e-commerce durant la pandémie.
+      ")
+    ),
+
+    # -----------------------------------------------
+    # CONCLUSION
+    # -----------------------------------------------
+
+    box(
+      title = "Conclusion — Q8",
+      width = 12,
+      status = "primary",
+      solidHeader = TRUE,
+
+      p("
+        Non, toutes les compagnies n'ont pas résisté de la même façon à la crise COVID.
+        Le facteur le plus déterminant n'est pas le modèle économique low-cost vs major,
+        mais bien la nature de l'activité : cargo ou passagers.
+      "),
+
+      p("
+        FedEx et UPS ont traversé la crise quasi sans dommage, voire en bénéficiant
+        de l'explosion du e-commerce. Leur trafic en décembre 2021 dépasse largement
+        leur niveau de 2019.
+      "),
+
+      p("
+        Parmi les compagnies passagers, la reprise est très inégale et ne suit pas
+        la logique low-cost vs major. Des critères géographiques et structurels
+        semblent jouer un rôle plus important : les compagnies très dépendantes
+        du trafic international long-courrier (British Airways, easyJet sur les
+        liaisons transnationales) ont récupéré bien plus lentement que celles
+        tournées vers le trafic domestique ou régional (Southwest, Delta, Ryanair).
+      ")
+    )
+  ),
+
+  # =================================================
+  # Q9
+  # =================================================
+
   fluidRow(
 
     # =================================================
