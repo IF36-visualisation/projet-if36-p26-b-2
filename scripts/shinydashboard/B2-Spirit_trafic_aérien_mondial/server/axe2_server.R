@@ -5,10 +5,65 @@ library(geosphere)
 library(viridis)
 
 
+# =================================================
+# Q5 — Données préparées au chargement du module
+# =================================================
+
+continent_labels <- c(
+  "AF" = "Afrique",
+  "AN" = "Antarctique",
+  "AS" = "Asie",
+  "EU" = "Europe",
+  "NA" = "Amérique du Nord",
+  "OC" = "Océanie",
+  "SA" = "Amérique du Sud"
+)
+
+flights_all_q5 <- bind_rows(
+  read_csv("../../../data/clean/clean_COVID_19_Flightfile_2019.csv", show_col_types = FALSE) %>% mutate(annee = 2019L),
+  read_csv("../../../data/clean/clean_COVID_19_Flightfile_2020.csv", show_col_types = FALSE) %>% mutate(annee = 2020L),
+  read_csv("../../../data/clean/clean_COVID_19_Flightfile_2021.csv", show_col_types = FALSE) %>% mutate(annee = 2021L),
+  read_csv("../../../data/clean/clean_COVID_19_Flightfile_2022.csv", show_col_types = FALSE) %>% mutate(annee = 2022L)
+)
+
+airports_q5 <- read_csv(
+  "../../../data/clean/airports.csv",
+  na = "",
+  show_col_types = FALSE
+) %>%
+  select(icao_code, continent) %>%
+  filter(!is.na(continent)) %>%
+  distinct(icao_code, .keep_all = TRUE) %>%
+  mutate(continent = recode(continent, !!!continent_labels))
+
+flights_continent_q5 <- flights_all_q5 %>%
+  left_join(airports_q5, by = c("origin" = "icao_code")) %>%
+  filter(!is.na(continent)) %>%
+  mutate(
+    mois = month(firstseen)
+  ) %>%
+  group_by(annee, mois, continent) %>%
+  summarise(n = n(), .groups = "drop")
+
+base_jan2019_q5 <- flights_continent_q5 %>%
+  filter(annee == 2019, mois == 1) %>%
+  select(continent, base = n)
+
+flights_normalized_q5 <- flights_continent_q5 %>%
+  left_join(base_jan2019_q5, by = "continent") %>%
+  filter(!is.na(base), base > 0) %>%
+  mutate(
+    index     = (n / base) * 100,
+    date      = make_date(annee, mois, 1),
+    annee_chr = as.character(annee)
+  )
+
+# =================================================
+
 axe2_server <- function(input, output, session) {
-  
+
   print("START AXE2 SERVER")
-  
+
   # =================================================
   # 1. CHOIX DATASET et telechargement donnée
   # =================================================
@@ -161,5 +216,179 @@ axe2_server <- function(input, output, session) {
         subtitle = paste("Top", input$nb_corridors, "corridors"),
         colour = "Nb vols"
       )
+  })
+
+  # =================================================
+  # GRAPHE Q5-1 — Line chart normalisé (base 100)
+  # =================================================
+
+  output$q5_line_chart <- renderPlotly({
+
+    req(input$q5_years)
+
+    data_plot <- flights_normalized_q5 %>%
+      filter(annee_chr %in% input$q5_years)
+
+    p <- ggplot(
+      data_plot,
+      aes(
+        x     = date,
+        y     = index,
+        color = continent,
+        group = continent,
+        text  = paste0(
+          "Continent : ", continent,
+          "<br>Date : ",  format(date, "%b %Y"),
+          "<br>Indice : ", round(index, 1)
+        )
+      )
+    ) +
+
+      geom_line(linewidth = 0.9) +
+
+      geom_hline(
+        yintercept = 100,
+        linetype   = "dashed",
+        color      = "gray50"
+      ) +
+
+      scale_x_date(
+        date_labels = "%b %Y",
+        date_breaks = "3 months"
+      ) +
+
+      scale_color_brewer(palette = "Set1") +
+
+      labs(
+        title = "Évolution du trafic aérien par continent (base 100 = jan. 2019)",
+        x     = NULL,
+        y     = "Indice (base 100)",
+        color = "Continent"
+      ) +
+
+      theme_minimal(base_size = 12) +
+
+      theme(
+        plot.title  = element_text(face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1)
+      )
+
+    ggplotly(p, tooltip = "text")
+  })
+
+  # =================================================
+  # GRAPHE Q5-2 — Bar chart % de chute
+  # =================================================
+
+  output$q5_bar_chute <- renderPlotly({
+
+    moy_2019 <- flights_continent_q5 %>%
+      filter(annee == 2019) %>%
+      group_by(continent) %>%
+      summarise(moy_2019 = mean(n), .groups = "drop")
+
+    avril_2020 <- flights_continent_q5 %>%
+      filter(annee == 2020, mois == 4) %>%
+      select(continent, n_avril2020 = n)
+
+    chute <- moy_2019 %>%
+      left_join(avril_2020, by = "continent") %>%
+      filter(!is.na(n_avril2020)) %>%
+      mutate(
+        pct_chute = ((n_avril2020 - moy_2019) / moy_2019) * 100,
+        continent = reorder(continent, pct_chute)
+      )
+
+    p <- ggplot(
+      chute,
+      aes(
+        x    = continent,
+        y    = pct_chute,
+        text = paste0(continent, " : ", round(pct_chute, 1), "%")
+      )
+    ) +
+
+      geom_col(width = 0.7, fill = "#4C78A8") +
+
+      coord_flip() +
+
+      labs(
+        title = "Chute du trafic par continent : moyenne 2019 → avril 2020",
+        x     = NULL,
+        y     = "Variation (%)"
+      ) +
+
+      theme_minimal(base_size = 12) +
+
+      theme(
+        plot.title = element_text(face = "bold")
+      )
+
+    ggplotly(p, tooltip = "text")
+  })
+
+  # =================================================
+  # GRAPHE Q5-3 — Bar chart couverture OpenSky
+  # =================================================
+
+  output$q5_bar_couverture <- renderPlotly({
+
+    airports_total <- airports_q5 %>%
+      count(continent, name = "Total OurAirports")
+
+    airports_in_data <- flights_all_q5 %>%
+      select(origin) %>%
+      filter(!is.na(origin)) %>%
+      distinct() %>%
+      left_join(airports_q5, by = c("origin" = "icao_code")) %>%
+      filter(!is.na(continent)) %>%
+      count(continent, name = "Couverts dans nos données")
+
+    couverture <- airports_total %>%
+      left_join(airports_in_data, by = "continent") %>%
+      replace_na(list(`Couverts dans nos données` = 0)) %>%
+      pivot_longer(
+        cols      = c(`Total OurAirports`, `Couverts dans nos données`),
+        names_to  = "source",
+        values_to = "nb"
+      )
+
+    p <- ggplot(
+      couverture,
+      aes(
+        x    = continent,
+        y    = nb,
+        fill = source,
+        text = paste0(continent, " — ", source, " : ", nb)
+      )
+    ) +
+
+      geom_col(position = "dodge", width = 0.7) +
+
+      scale_fill_manual(
+        values = c(
+          "Total OurAirports"         = "#4C78A8",
+          "Couverts dans nos données" = "#F58518"
+        )
+      ) +
+
+      scale_y_continuous(labels = scales::comma) +
+
+      labs(
+        title = "Couverture OpenSky vs réalité par continent",
+        x     = NULL,
+        y     = "Nombre d'aéroports",
+        fill  = NULL
+      ) +
+
+      theme_minimal(base_size = 12) +
+
+      theme(
+        plot.title      = element_text(face = "bold"),
+        legend.position = "bottom",
+        axis.text.x     = element_text(angle = 30, hjust = 1)
+      )
+
+    ggplotly(p, tooltip = "text")
   })
 }
