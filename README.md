@@ -4,6 +4,47 @@
 
 ---
 
+## Structure du projet
+
+```
+.
+├── shiny/                  # L'application Shiny (le dashboard)
+│   ├── global.R            #   chargement des données (une seule fois au démarrage)
+│   ├── ui.R / server.R     #   assemblage des onglets
+│   ├── ui/                 #   interface par axe (intro, axe1 … axe4)
+│   └── server/             #   logique et graphiques par axe
+├── data/clean/             # Données nettoyées (CSV OpenSky + OurAirports + .rds du globe)
+├── scripts/                # Scripts d'analyse, organisés par axe
+│   ├── axe1/ … axe4/       #   un script .R par question (Q1 … Q9)
+│   └── utils/              #   échantillonnage, téléchargement, préparation du globe
+├── peer-review/            # Rapport du peer-review (.Rmd + .pdf)
+├── rapport_rendu1.md       # Rapport du rendu 1
+├── README.md
+└── lancer_dashboard.bat    # Lance le dashboard en un clic (Windows)
+```
+
+> ⚠️ Le dossier `shiny/` lit les données via `../data/clean/`. Il doit donc rester **au même niveau que `data/`**, à la racine du dépôt.
+
+## Lancer le dashboard
+
+**Prérequis :** R (≥ 4.0) avec les packages suivants :
+
+```r
+install.packages(c("shiny", "shinydashboard", "echarts4r", "tidyverse",
+                    "scales", "lubridate", "plotly", "geosphere", "ggridges",
+                    "ggrepel", "maps", "viridis", "base64enc", "shinycssloaders"))
+```
+
+**Option 1 — En un clic (Windows) :** double-cliquer sur **`lancer_dashboard.bat`**. Le dashboard s'ouvre tout seul dans le navigateur.
+
+**Option 2 — Depuis R ou RStudio**, à la racine du projet :
+
+```r
+shiny::runApp("shiny", launch.browser = TRUE)
+```
+
+---
+
 ## Introduction
 
 ### Données
@@ -18,7 +59,7 @@ Les données sont issues du protocole **ADS-B** (Automatic Dependent Surveillanc
 
 **Format :** Fichiers CSV mensuels (un par mois, 48 fichiers au total).
 
-**Volume :** Plus de **41 millions de vols**, couvrant environ **160 000 aéronefs** et **13 900 aéroports** dans **127 pays**. Pour notre analyse, nous sélectionnerons des mois stratégiques (pré-COVID, pic de crise, reprise) afin de garder un volume exploitable en R tout en couvrant les moments clés.
+**Volume :** Plus de **41 millions de vols**, couvrant environ **160 000 aéronefs** et **13 900 aéroports** dans **127 pays**. Pour garder un volume exploitable en R tout en couvrant l'ensemble de la période, nous travaillons sur un **échantillon aléatoire** des données : **1 %** pour chacun des fichiers annuels (2019, 2020, 2021, 2022) et **~0,3 %** pour le fichier complet 2019-2022 (soit environ **352 000 vols**). Un tirage aléatoire conserve les tendances globales ; seules les analyses sur de très petits sous-groupes (régions peu couvertes, types d'avions rares) sont à interpréter avec prudence.
 
 **Variables du dataset principal (17 colonnes) :**
 
@@ -75,7 +116,7 @@ En croisant ces 4 sources, notre jeu de données final combinera largement plus 
 
 ### Plan d'analyse
 
-Notre ambition est double : produire des analyses statistiques rigoureuses et les incarner dans une **application Shiny immersive centrée sur un globe terrestre 3D interactif** (via le package R `threejs` et sa fonction `globejs`, qui permet de tracer des arcs, des points et des textures sur une sphère WebGL directement intégrée à Shiny).
+Notre ambition est double : produire des analyses statistiques rigoureuses et les incarner dans une **application Shiny immersive centrée sur un globe terrestre 3D interactif** (via le package R `echarts4r`, qui rend un globe WebGL — arcs, points et textures sur une sphère — directement intégré à Shiny).
 
 Nos questions s'articulent autour de quatre axes.
 
@@ -116,7 +157,7 @@ Sur le globe, on pourra afficher le réseau de routes d'une compagnie spécifiqu
 
 #### Le globe interactif : vision technique
 
-L'application Shiny intégrera un **globe terrestre 3D interactif** construit avec le package R `threejs` (`globejs`). Ce package, basé sur la librairie JavaScript three.js, permet de rendre un globe WebGL directement dans Shiny avec :
+L'application Shiny intègre un **globe terrestre 3D interactif** construit avec le package R `echarts4r`. Ce package, basé sur la librairie JavaScript Apache ECharts (module ECharts GL), rend un globe WebGL directement dans Shiny avec :
 - Des **points** géolocalisés (aéroports) dont la taille/couleur encode le volume de trafic
 - Des **arcs** géodésiques entre paires d'aéroports (routes) avec opacité proportionnelle à la fréquence
 - Une **texture de fond** personnalisable (carte du monde, vue nocturne de la NASA…)

@@ -7,7 +7,8 @@ library(viridis)
 # Chargement des données
 # =========================================================
 
-setwd("C:/Users/elodie/OneDrive/Bureau/sn2/IF36/projet_if36_2/projet-if36-p26-b-2")
+# A executer depuis la racine du projet (ouvrir le .Rproj definit le bon dossier).
+# Note : un setwd() vers une machine precise a ete retire ici pour la portabilite.
 
 flights <- read_csv("data/clean/clean_COVID_19_Flightfile_2019.csv")
 airports <- read_csv("data/clean/airports.csv")
