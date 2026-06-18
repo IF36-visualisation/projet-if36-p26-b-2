@@ -95,6 +95,26 @@ Shiny interactive (globe 3D + onglets par axe) ; ce rapport en restitue les prin
 
 ---
 
+# Traitement des données
+
+## Source principale : OpenSky Network
+
+L’analyse repose sur les données de vols issues de la base OpenSky Network, qui recense plus de 41 millions de vols à l’échelle mondiale. Afin de rendre les traitements compatibles avec les contraintes de calcul et de stockage, un échantillonnage aléatoire a été réalisé sur les données des années 2019 à 2022.
+
+Quatre jeux de données (un par année) ont ainsi été constitués, chacun représentant environ 1 % des observations annuelles disponibles. De plus, un jeu de données général regroupant les quatre années a été créé ; il représente environ 0,3 % du volume total initial. Cette réduction permet une manipulation fluide des données et facilite le partage du projet via GitHub, tout en conservant une représentation globale des tendances observées.
+
+L’échantillonnage a été effectué de manière aléatoire en fixant une graine aléatoire (*random seed*), garantissant ainsi la reproductibilité des résultats obtenus. Il convient toutefois de noter que toute procédure d’échantillonnage peut conserver, voire accentuer les biais déjà présents dans les données d’origine.
+
+## Source complémentaire : OurAirports
+
+Les informations relatives aux aéroports proviennent de la base de données OurAirports, qui répertorie environ 78 000 infrastructures aéroportuaires à travers le monde. Cette source a été utilisée afin d’enrichir les données de vols par des informations descriptives sur les aéroports.
+
+La fusion des deux bases a été réalisée à partir des codes IATA des aéroports. Le code OACI (ICAO) n’étant pas disponible dans les données OpenSky utilisées, il n’a pas pu être retenu comme clé de jointure.
+
+Les aéroports ne disposant pas d’un code IATA ont donc été supprimés lors de la phase de fusion. Cette restriction a un impact limité sur l’analyse, celle-ci portant principalement sur les grands aéroports du réseau aérien mondial, qui possèdent tous un code IATA.
+
+---
+
 # Axe 1 — Le pouls du ciel : dynamiques temporelles
 
 ## Q1 — Comment le volume de vols a-t-il pulsé entre 2019 et 2022 ?
@@ -154,15 +174,37 @@ ggplot(monthly_year, aes(mois_num, n_flights, color = annee, group = annee)) +
 
 ## Q2 — Le trafic aérien a-t-il un rythme cardiaque ?
 
-**Hypothèse.** Le trafic suit des cycles réguliers selon l'heure, le jour de la semaine et le mois.
 
+  
+Dans cette partie, nous cherchons à déterminer si le trafic aérien mondial
+        suit des cycles réguliers comparables à un rythme biologique.
+        L’objectif est d’identifier des variations récurrentes selon l’heure,
+        le jour de la semaine ou encore la période de l’année.
+   
+Pour cette analyse, nous utilisons les données de l’année 2019,
+        choisie comme année de référence car elle précède la pandémie de COVID-19
+        et représente donc un fonctionnement plus “normal” du trafic aérien mondial.
+        
+  **Hypothèse.**— Variation selon l’heure
+  
+   Nous supposons que le trafic aérien mondial suit un cycle journalier marqué.
+        L’activité devrait être faible pendant la nuit européenne puis augmenter
+        progressivement au cours de la journée avec l’ouverture des grands hubs
+        internationaux.
+    
+Nous nous attendons également à observer un pic en fin de journée UTC,
+        correspondant au chevauchement des activités aériennes entre l’Europe
+        et l’Amérique du Nord.
+    
 ```{r q2-prep}
 Q2 <- flights_2019 %>%
   mutate(firstseen = ymd_hms(firstseen, tz = "UTC"),
          annee = year(firstseen), mois = month(firstseen),
          jour = day(firstseen), heure = hour(firstseen))
 ```
+ 
 
+     
 ```{r q2-heure, fig.height=4}
 Q2 %>% group_by(jour, heure) %>% summarise(n = n(), .groups = "drop") %>%
   group_by(heure) %>% summarise(m = mean(n), .groups = "drop") %>%
@@ -173,27 +215,78 @@ Q2 %>% group_by(jour, heure) %>% summarise(n = n(), .groups = "drop") %>%
   theme_minimal(base_size = 12) + theme(plot.title = element_text(face = "bold"))
 ```
 
-```{r q2-jour-mois, fig.width=10, fig.height=4}
+ **Hypothèse validée**
+    
+Le graphique met clairement en évidence un rythme journalier du trafic aérien.
+        Le nombre de vols diminue fortement entre 3h et 5h UTC, puis augmente
+        progressivement à partir du matin européen.
+     
+Le maximum est atteint vers 15h UTC, moment où les activités aériennes européennes et nord-américaines se chevauchent.
+   
+  Cette structure cyclique semble principalement s’expliquer par les fuseaux horaires et par la concentration des départs et arrivées autour des grandes zones économiques mondiales.
+  
+  **Hypothèse** — Variation selon le jour de la semaine
+  
+Nous supposons que les jours ouvrés concentrent davantage de vols que
+        le week-end en raison des déplacements professionnels.
+     
+Nous nous attendons à observer une baisse notable le samedi,traditionnellement plus calme pour l’aviation d’affaires.
+
+```{r q2-jour, fig.width=10, fig.height=4}
 g_jour <- Q2 %>% filter(!is.na(annee), !is.na(mois), !is.na(jour)) %>%
   mutate(date = make_date(annee, mois, jour), js = wday(date, label = TRUE, week_start = 1)) %>%
   group_by(date, js) %>% summarise(n = n(), .groups = "drop") %>%
   group_by(js) %>% summarise(m = mean(n), .groups = "drop") %>%
   ggplot(aes(js, m)) + geom_col(fill = "#4C78A8", width = 0.7) +
   coord_cartesian(ylim = c(0, 950)) +
-  labs(title = "Par jour de la semaine", x = NULL, y = "Vols moyens") +
+  labs(title = "Trafic moyen par jour de la semaine — 2019", x = NULL, y = "Vols moyens") +
   theme_minimal(base_size = 12) + theme(plot.title = element_text(face = "bold"), panel.grid.major.x = element_blank())
 
-g_mois <- Q2 %>% filter(!is.na(mois)) %>% count(mois) %>% mutate(mois = factor(mois, levels = 1:12)) %>%
-  ggplot(aes(mois, n)) + geom_col(fill = "#4C78A8") + scale_y_continuous(labels = comma) +
-  labs(title = "Par mois", x = "Mois", y = "Vols") +
-  theme_minimal(base_size = 12) + theme(plot.title = element_text(face = "bold"))
-
-gridExtra::grid.arrange(g_jour, g_mois, ncol = 2)
+g_jour
 ```
 
-**Résultat — validé.** Le trafic a bien un rythme : minimum nocturne (~3-5 h UTC), pic à 15 h UTC
-(chevauchement Europe / Amérique du Nord) ; progression du lundi au vendredi, creux du samedi ;
-saisonnalité estivale marquée (pic juillet-août).
+**Hypothèse globalement validée**
+
+Les jours ouvrés présentent effectivement les volumes de trafic les plus élevés.Le trafic augmente progressivement du lundi au vendredi.
+  
+  Une chute importante apparaît le samedi, tandis que le dimanche remonte légèrement sans retrouver les niveaux observés en semaine.
+   
+Cette organisation hebdomadaire semble liée à l’importance des déplacements professionnels dans le trafic aérien mondial.
+    
+**Hypothèse** — Variation selon le mois de l’année
+
+Nous supposons que le trafic aérien mondial augmente fortement durant l’été,
+        notamment en juillet et août, période correspondant aux vacances scolaires
+        et au tourisme international dans l’hémisphère nord.
+      
+À l’inverse, nous nous attendons à un trafic plus faible durant les mois
+d’hiver, en particulier en janvier et février.
+    
+```{r q2-mois, fig.width=10, fig.height=4}
+g_mois <- Q2 %>% filter(!is.na(mois)) %>% count(mois) %>% mutate(mois = factor(mois, levels = 1:12)) %>%
+  ggplot(aes(mois, n)) + geom_col(fill = "#4C78A8") + scale_y_continuous(labels = comma) +
+  labs(title = "Trafic par mois — 2019", x = "Mois", y = "Vols") +
+  theme_minimal(base_size = 12) + theme(plot.title = element_text(face = "bold"))
+
+g_mois
+```
+**Hypothèse validée**
+      
+  
+Le graphique montre une saisonnalité très marquée du trafic aérien mondial.
+        Les volumes sont relativement faibles en début d’année puis augmentent
+        progressivement jusqu’au pic estival de juillet-août.
+     
+Une légère reprise apparaît également en décembre,
+        probablement liée aux déplacements des fêtes de fin d’année.
+      
+Cette saisonnalité semble principalement s’expliquer par les flux touristiques
+        internationaux et les périodes de vacances scolaires.
+    
+    
+
+
+
 
 ---
 
@@ -201,7 +294,51 @@ saisonnalité estivale marquée (pic juillet-août).
 
 ## Q3 — Quels sont les corridors aériens les plus empruntés ?
 
-**Hypothèse.** Les flux les plus denses se concentrent aux États-Unis, en Europe et en Asie de l'Est.
+Cette partie du projet cherche à visualiser les principaux flux
+        du trafic aérien mondial.
+
+En reliant les aéroports les plus connectés par des arcs géographiques,
+        nous pouvons observer la structure du réseau aérien mondial ainsi que
+        les grands corridors internationaux.
+        
+Les zones les plus denses devraient révéler les grands axes du trafic :
+        Amérique du Nord, Europe occidentale et Asie de l’Est.
+    
+  
+      
+**Hypothèse 1** — Forte densité aux États-Unis et en Europe"),
+      
+
+Les zones les plus denses devraient révéler les grands axes du trafic :
+        Amérique du Nord, Europe occidentale et dans une moindre mesure Asie de l’Est.
+
+**Hypothèse 2** — Un trafic très inégal selon les régions du monde"),
+      
+
+Nous supposons que certaines régions du globe, notamment l’Afrique,
+    l’Asie centrale ou certaines zones d’Amérique du Sud, apparaîtront
+    beaucoup moins connectées dans les données.
+  
+
+Cette différence pourrait refléter à la fois les inégalités du trafic
+    aérien mondial et d’éventuels biais dans les données disponibles.
+
+
+**Hypothèse 3** — Les longs trajets dominent le trafic mondial"),
+      
+Nous supposons que les corridors les plus fréquentés correspondent
+    principalement à des vols long-courriers reliant les grands centres
+    économiques internationaux.
+ 
+  Les trajets régionaux plus courts devraient théoriquement apparaître
+    moins dominants.
+
+**Hypothèse 4 **— Les corridors dominants restent stables selon les années"),
+      
+ Nous supposons que, malgré les variations du volume total de vols,
+    les principaux corridors mondiaux restent globalement les mêmes
+    d’une année à l’autre.
+ 
 
 ```{r q3-corridors, fig.height=5}
 corridors <- flights_2019 %>%
@@ -225,10 +362,84 @@ ggplot() +
   labs(title = "Top 300 des corridors aériens mondiaux (2019)")
 ```
 
-**Résultat — nuancé.** La densité est extrême aux États-Unis (réseau domestique très maillé) et forte en
-Europe. De vastes zones (Afrique, Asie centrale) apparaissent peu connectées — ce qui reflète à la fois des
-inégalités réelles **et** un biais de couverture des capteurs OpenSky. Contrairement à l'intuition, les
-corridors dominants ne sont pas surtout des long-courriers mais des **liaisons régionales à haute fréquence**.
+**Hypothèse  Forte densité aux États-Unis et en Europe — Globalement validée**
+    
+   
+La carte confirme une concentration extrêmement forte du trafic
+    aérien aux États-Unis.
+    
+  mais Le réseau domestique américain et beaucoup plus dense que
+    le réseau européen, avec de nombreux corridors régionaux très actifs.
+
+Ce phénomène semble lié à la taille du territoire américain,
+    à la dépendance au transport aérien intérieur et au grand nombre
+    d’aéroports secondaires connectés.
+
+**Hypothèse 2: Un trafic très inégal selon les régions du monde — Validée**
+    
+ Une grande partie du globe apparaît très peu connectée dans les données.
+  
+  
+  L’Afrique, certaines zones d’Asie centrale et d’Amérique du Sud
+    présentent relativement peu de corridors majeurs.
+  
+  
+  Cette différence semble provenir à la fois des inégalités réelles
+    du trafic mondial et probablement de biais de couverture dans le dataset.
+  
+  
+  en effet, ce dataset est tourné vers les pays occidentaux 
+    (plus de capteurs aux États-Unis et en Europe que dans les autres régions) 
+    de plus 
+    pour pouvoir utiliser correctement le dataset, j'ai dû en utiliser qu'1%
+    réduisant les chances des courriers plus faibles d'apparaître,
+    enfin j'ai dû retirer de nombreuses lignes dues à des valeurs NA,
+    On peut supposer que les régions avec moin de capteur ont plus de valeur NA.
+    exaspérant encore plus les bias
+  
+  
+  **Hypothèse 3: Les longs trajets dominent le trafic mondial — Invalidée**
+    
+   
+Contrairement à ce que nous attendions, les corridors les plus utilisés
+    ne sont pas majoritairement des vols long-courriers.
+  
+
+De nombreux trajets relativement courts ou moyen-courriers dominent
+    fortement le classement.
+
+
+Cela semble s’expliquer par la fréquence très élevée des vols régionaux
+    autour des grands hubs économiques.
+
+les routes les plus fréquentées sont souvent des liaisons
+    régionales très spécifiques entre grandes métropoles proches ou
+    difficilement reliées autrement.
+
+cela est particulièrement visibles lorsque le nombre de corridors affichés
+    reste faible (ex : top 100 ou top 200).
+ 
+    
+**Hypothèse 4: Les corridors dominants restent stables selon les années — Invalidée**
+    
+  
+Le classement des principaux corridors évolue sensiblement selon les années.
+
+    
+
+  Certains axes majeurs disparaissent temporairement tandis que d’autres
+    deviennent beaucoup plus visibles.
+  
+
+Les années COVID montrent particulièrement bien ces changements,
+    avec une forte réorganisation des flux aériens mondiaux.
+
+nous ne savons pas trop d'où vient ce phénomène, mais une partie de l'explication
+    Peut-être un effet de mode mais aussi être dû au covid.
+    en effet, pendant le Covid, les routes ont été interdites et de manière générale les voyages ont été 
+    Décourage.
+ 
+
 
 ## Q4 — Quels hubs structurent le réseau aérien mondial ?
 
