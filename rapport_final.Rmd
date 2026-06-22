@@ -122,6 +122,7 @@ Les aéroports ne disposant pas d’un code IATA ont donc été supprimés lors 
 
 ---
 
+<<<<<<< HEAD
 # L'application Shiny — exploration interactive
 
 Au-delà des graphiques statiques de ce rapport, nous avons développé une **application Shiny** (dossier `shiny/`) centrée sur un **globe terrestre 3D interactif**. Les deux figures ci-dessous en sont des captures d'écran : **elles ne sont pas générées dans ce rapport mais dans l'application**, que le lecteur est invité à lancer pour interagir avec ces visualisations.
@@ -140,6 +141,8 @@ En **cliquant sur un aéroport**, l'utilisateur ouvre une fiche détaillée qui 
 
 ---
 
+=======
+>>>>>>> c7259ad8c70e46ca0b9798ca46511c95ab614275
 # Axe 1 — Le pouls du ciel : dynamiques temporelles
 
 ## Q1 — Comment le volume de vols a-t-il pulsé entre 2019 et 2022 ?
@@ -359,13 +362,21 @@ Les zones les plus denses devraient révéler les grands axes du trafic :
     
   
       
+<<<<<<< HEAD
 **Hypothèse 1 — Forte densité aux États-Unis et en Europe.**
+=======
+**Hypothèse 1** — Forte densité aux États-Unis et en Europe"),
+>>>>>>> c7259ad8c70e46ca0b9798ca46511c95ab614275
       
 
 Les zones les plus denses devraient révéler les grands axes du trafic :
         Amérique du Nord, Europe occidentale et dans une moindre mesure Asie de l’Est.
 
+<<<<<<< HEAD
 **Hypothèse 2 — Un trafic très inégal selon les régions du monde.**
+=======
+**Hypothèse 2** — Un trafic très inégal selon les régions du monde"),
+>>>>>>> c7259ad8c70e46ca0b9798ca46511c95ab614275
       
 
 Nous supposons que certaines régions du globe, notamment l’Afrique,
@@ -377,7 +388,11 @@ Cette différence pourrait refléter à la fois les inégalités du trafic
     aérien mondial et d’éventuels biais dans les données disponibles.
 
 
+<<<<<<< HEAD
 **Hypothèse 3 — Les longs trajets dominent le trafic mondial.**
+=======
+**Hypothèse 3** — Les longs trajets dominent le trafic mondial"),
+>>>>>>> c7259ad8c70e46ca0b9798ca46511c95ab614275
       
 Nous supposons que les corridors les plus fréquentés correspondent
     principalement à des vols long-courriers reliant les grands centres
@@ -386,7 +401,11 @@ Nous supposons que les corridors les plus fréquentés correspondent
   Les trajets régionaux plus courts devraient théoriquement apparaître
     moins dominants.
 
+<<<<<<< HEAD
 **Hypothèse 4 — Les corridors dominants restent stables selon les années.**
+=======
+**Hypothèse 4 **— Les corridors dominants restent stables selon les années"),
+>>>>>>> c7259ad8c70e46ca0b9798ca46511c95ab614275
       
  Nous supposons que, malgré les variations du volume total de vols,
     les principaux corridors mondiaux restent globalement les mêmes
